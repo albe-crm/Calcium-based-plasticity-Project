@@ -1,0 +1,134 @@
+"""
+iaf_cond_alpha - Simple conductance based leaky integrate-and-fire neuron model
+###############################################################################
+
+Description
++++++++++++
+
+iaf_cond_alpha is an implementation of a spiking neuron using IAF dynamics with
+conductance-based synapses. Incoming spike events induce a post-synaptic change
+of conductance modelled by an alpha function. The alpha function
+is normalised such that an event of weight 1.0 results in a peak current of 1 nS
+at :math:`t = \tau_{syn}`.
+
+
+References
+++++++++++
+
+.. [1] Meffin H, Burkitt AN, Grayden DB (2004). An analytical
+       model for the large, fluctuating synaptic conductance state typical of
+       neocortical neurons in vivo. Journal of Computational Neuroscience,
+       16:159-175.
+       DOI: https://doi.org/10.1023/B:JCNS.0000014108.03012.81
+.. [2] Bernander O, Douglas RJ, Martin KAC, Koch C (1991). Synaptic background
+       activity influences spatiotemporal integration in single pyramidal
+       cells.  Proceedings of the National Academy of Science USA,
+       88(24):11569-11573.
+       DOI: https://doi.org/10.1073/pnas.88.24.11569
+.. [3] Kuhn A, Rotter S (2004) Neuronal integration of synaptic input in
+       the fluctuation- driven regime. Journal of Neuroscience,
+       24(10):2345-2356
+       DOI: https://doi.org/10.1523/JNEUROSCI.3349-03.2004
+
+See also
+++++++++
+
+iaf_cond_bubu
+"""
+neuron iaf_cond_bubu:
+    state:
+        r integer = 0      # counts number of tick during the refractory period
+        V_m mV = E_L   # membrane potential
+        g_AMPA real = 0
+        g_NMDA real = 0
+        g_AMPA$ real = AMPAInitialValue
+        g_NMDA$ real = NMDAInitialValue
+
+    equations:
+        inline I_syn_ampa pA = -convolve(g_AMPA, AMPA) * nS * (V_m - AMPA_E_rev)
+        inline I_syn_nmda pA = -convolve(g_NMDA, NMDA) * nS * (V_m - NMDA_E_rev) / (1 + exp((NMDA_Vact - V_m) / NMDA_Sact))
+        # For now, maintaining NMDA contribution to V_m. Consider separating I_syn for membrane potential and plasticity.
+        inline I_syn pA = I_syn_ampa + I_syn_nmda
+        
+        
+        kernel g_inh = (e/tau_syn_inh) * t * exp(-t/tau_syn_inh)
+        kernel g_exc = (e/tau_syn_exc) * t * exp(-t/tau_syn_exc)
+        inline I_syn_exc pA = convolve(g_exc, exc_spikes) * nS * ( V_m - E_exc )
+        inline I_syn_inh pA = convolve(g_inh, inh_spikes) * nS * ( V_m - E_inh )
+        
+        inline I_leak pA = g_L * ( V_m - E_L )
+
+        V_m' = ( -I_leak - I_syn_exc - I_syn_inh + I_e + I_stim ) / C_m
+        
+        #############
+        # Synapses
+        #############
+        kernel g_AMPA' = g_AMPA$ - g_AMPA / AMPA_Tau_2,
+               g_AMPA$' = -g_AMPA$ / AMPA_Tau_1
+
+        kernel g_NMDA' = g_NMDA$ - g_NMDA / NMDA_Tau_2,
+               g_NMDA$' = -g_NMDA$ / NMDA_Tau_1
+    parameters:
+        V_th mV = -55 mV         # Threshold potential
+        V_reset mV = -60 mV      # Reset potential
+        t_ref ms = 2 ms          # Refractory period
+        g_L nS = 16.6667 nS      # Leak conductance
+        C_m pF = 250 pF          # Membrane capacitance
+        E_exc mV = 0 mV          # Excitatory reversal potential
+        E_inh mV = -85 mV        # Inhibitory reversal potential
+        E_L mV = -70 mV          # Leak reversal potential (aka resting potential)
+        tau_syn_exc ms = 0.2 ms  # Synaptic time constant of excitatory synapse
+        tau_syn_inh ms = 2 ms    # Synaptic time constant of inhibitory synapse
+
+        
+       # Synapse parameters
+        AMPA_g_peak nS = 0.1 nS # peak conductance
+        AMPA_E_rev mV = 0.0 mV # reversal potential
+        AMPA_Tau_1 ms = 0.5 ms # rise time
+        AMPA_Tau_2 ms = 2.4 ms # decay time, Tau_1 < Tau_2
+        NMDA_g_peak nS = 0.075 nS # peak conductance
+        NMDA_Tau_1 ms = 4.0 ms # rise time
+        NMDA_Tau_2 ms = 40.0 ms # decay time, Tau_1 < Tau_2
+        NMDA_E_rev mV = 0.0 mV # reversal potential
+        NMDA_Vact mV = -58.0 mV # voltage activation
+        NMDA_Sact mV = 2.5 mV # scale of inactivation
+
+        # constant external input current
+        I_e pA = 0 pA
+
+    internals:
+        RefractoryCounts integer = steps(t_ref) # refractory time in steps
+        # AMPAInitialValue Calculation
+        inline exact_integration_adjustment_AMPA real = (1 / AMPA_Tau_2 - 1 / AMPA_Tau_1) * ms
+        t_peak_AMPA real = (AMPA_Tau_2 * AMPA_Tau_1 * ln(AMPA_Tau_2 / AMPA_Tau_1)) / (AMPA_Tau_2 - AMPA_Tau_1) / ms
+        inline normalisation_factor_AMPA real = 1 / (exp(-t_peak_AMPA / AMPA_Tau_1) - exp(-t_peak_AMPA / AMPA_Tau_2))
+        inline AMPAInitialValue real = AMPA_g_peak * normalisation_factor_AMPA * exact_integration_adjustment_AMPA
+
+        # NMDAInitialValue Calculation
+        inline exact_integration_adjustment_NMDA real = (1 / NMDA_Tau_2 - 1 / NMDA_Tau_1) * ms
+        t_peak_NMDA real = (NMDA_Tau_2 * NMDA_Tau_1 * ln(NMDA_Tau_2 / NMDA_Tau_1)) / (NMDA_Tau_2 - NMDA_Tau_1) / ms
+        inline normalisation_factor_NMDA real = 1 / (exp(-t_peak_NMDA / NMDA_Tau_1) - exp(-t_peak_NMDA / NMDA_Tau_2))
+        inline NMDAInitialValue real = NMDA_g_peak * normalisation_factor_NMDA * exact_integration_adjustment_NMDA
+
+    input:
+        inh_spikes <- inhibitory spike
+        exc_spikes <- excitatory spike
+        AMPA <- spike
+        NMDA <- spike
+        I_stim pA <- continuous
+
+    output:
+        spike
+
+    update:
+        integrate_odes()
+        if r != 0: # neuron is absolute refractory
+            r =  r - 1
+            V_m = V_reset # clamp potential
+        elif V_m >= V_th:  # neuron is not absolute refractory
+            r = RefractoryCounts
+            V_m = V_reset # clamp potential
+            emit_spike()
+
+
+
