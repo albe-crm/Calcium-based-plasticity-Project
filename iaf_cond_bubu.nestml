@@ -39,33 +39,62 @@ neuron iaf_cond_bubu:
     state:
         r integer = 0      # counts number of tick during the refractory period
         V_m mV = E_L   # membrane potential
-        g_AMPA real = 0
         g_NMDA real = 0
-        g_AMPA$ real = AMPAInitialValue
         g_NMDA$ real = NMDAInitialValue
-
-    equations:
-        inline I_syn_ampa pA = -convolve(g_AMPA, AMPA) * nS * (V_m - AMPA_E_rev)
-        inline I_syn_nmda pA = -convolve(g_NMDA, NMDA) * nS * (V_m - NMDA_E_rev) / (1 + exp((NMDA_Vact - V_m) / NMDA_Sact))
-        # For now, maintaining NMDA contribution to V_m. Consider separating I_syn for membrane potential and plasticity.
-        inline I_syn pA = I_syn_ampa + I_syn_nmda
+        h_var real = 0
+        m_var real = 0
+        Ca_concentrazione_i mol/m**3 = 0 mol/m**3
+        C_star mol*ms/m**3 = 0 mol*ms/m**3
+        Rho real = 0
+        Heaviside_p real = 0
+        Heaviside_d real = 0
         
+    equations:
+        
+        recordable inline I_syn_nmda pA = -convolve(g_NMDA, NMDA) * nS * (V_m - NMDA_E_rev) / (1 + exp((NMDA_Vact - V_m) / NMDA_Sact))
+        # For now, maintaining NMDA contribution to V_m. Consider separating I_syn for membrane potential and plasticity.
+        
+        
+        #################################### variables for VDCC ###########################
+        recordable inline h_infinity real = 1 / (1 + exp( ( V_hh - V_m) / k_h ) )
+        recordable inline m_infinity real = 1 / (1 + exp( ( V_hm - V_m ) / k_m ) )
+
+        recordable inline gca_VDCC nS = ( 1e-3 ) * gca_bar_abs_VDCC * m_var * m_var * h_var
+        h_var' = (h_infinity - h_var ) / tau_h
+        m_var' = (m_infinity - m_var ) / tau_m
+        #################################### new current VDCC##############################
+        recordable inline Ica_VDCC pA = gca_VDCC * ( V_m - Eca_syn ) 
+        ##################################################################################
         
         kernel g_inh = (e/tau_syn_inh) * t * exp(-t/tau_syn_inh)
         kernel g_exc = (e/tau_syn_exc) * t * exp(-t/tau_syn_exc)
         inline I_syn_exc pA = convolve(g_exc, exc_spikes) * nS * ( V_m - E_exc )
         inline I_syn_inh pA = convolve(g_inh, inh_spikes) * nS * ( V_m - E_inh )
         
+        #########################################variazione concentrazione calcio##########################################             
+        Ca_concentrazione_i'  = ( Ica_VDCC + I_syn_nmda ) * ( eta / ( 2 * Farad_cost * volume_CR ) ) - (Ca_concentrazione_i - Ca_concentrazione_rest) / tau_calcio
+        ###############################################Variabile cstar##################################################################
+        C_star'  = -1 * ( C_star / tau_star ) + ( Ca_concentrazione_i - Ca_concentrazione_rest)
+        ################################################################################################################################
+        
+        #####################################Heaviside function e Rho #################################################################
+        Rho' = ( -1 * Rho * ( 1 - Rho ) * ( 0.5 - Rho) + gamma_p * ( 1 - Rho ) * Heaviside_p - gamma_d * Rho * Heaviside_d ) / tau_rho
+        
+        ######################################### Gampa ###############################################################################
+        #siccome abbiamo inizializzto rho a zero 
+        g_ampa_d =
+        
         inline I_leak pA = g_L * ( V_m - E_L )
+        
+        
+        ################################ potenziale di membrana del iaf #########################################
 
         V_m' = ( -I_leak - I_syn_exc - I_syn_inh + I_e + I_stim ) / C_m
         
         #############
-        # Synapses
+        # Synapses sia ampa che sara da togliere probabilmente e NMDA ############################################
         #############
-        kernel g_AMPA' = g_AMPA$ - g_AMPA / AMPA_Tau_2,
-               g_AMPA$' = -g_AMPA$ / AMPA_Tau_1
-
+        
         kernel g_NMDA' = g_NMDA$ - g_NMDA / NMDA_Tau_2,
                g_NMDA$' = -g_NMDA$ / NMDA_Tau_1
     parameters:
@@ -79,37 +108,65 @@ neuron iaf_cond_bubu:
         E_L mV = -70 mV          # Leak reversal potential (aka resting potential)
         tau_syn_exc ms = 0.2 ms  # Synaptic time constant of excitatory synapse
         tau_syn_inh ms = 2 ms    # Synaptic time constant of inhibitory synapse
-
+        pi real = 3.14
         
        # Synapse parameters
-        AMPA_g_peak nS = 0.1 nS # peak conductance
-        AMPA_E_rev mV = 0.0 mV # reversal potential
-        AMPA_Tau_1 ms = 0.5 ms # rise time
-        AMPA_Tau_2 ms = 2.4 ms # decay time, Tau_1 < Tau_2
+        
         NMDA_g_peak nS = 0.075 nS # peak conductance
         NMDA_Tau_1 ms = 4.0 ms # rise time
         NMDA_Tau_2 ms = 40.0 ms # decay time, Tau_1 < Tau_2
         NMDA_E_rev mV = 0.0 mV # reversal potential
         NMDA_Vact mV = -58.0 mV # voltage activation
         NMDA_Sact mV = 2.5 mV # scale of inactivation
-
+        
+        # VDCC (R-type) Parameters with Units
+        gca_bar_VDCC nS/um**2 = 0.0744 nS/um**2    # Conduttanza massima (nS per micrometro quadrato)
+        V_hm mV = -5.9 mV                 # Potenziale di attivazione (1/2 per attivazione, Magee e Johnston 1995, corretto per m*m)
+        k_m mV = 9.5 mV                   # Pendenza attivazione, Magee e Johnston 1995 (corretto per m*m)
+        V_hh mV = -39 mV                  # Potenziale di inibizione (1/2 per inibizione, Magee e Johnston 1995)
+        k_h mV = -9.2 mV                   # Pendenza inibizione, Magee e Johnston 1995
+        tau_m ms = 1 ms                    # Costante di tempo massima (stima)
+        tau_h ms = 27 ms                   # Costante di tempo per h
+        cao_CR mol/m**3  = 2.0 mol/m**3                      # Concentrazione extracellulare di calcio in fette
+        cai_CR mol/m**3  = 1e-6 mol/m**3                   # Concentrazione intracellulare di calcio
+        volume_CR um*um*um = 0.087 um*um*um               # Volume (micrometri cubi)  il volume considerabile uguale a 1 per quello che interessa
+        Farad_cost C/mol = 96485 C/mol      # Costante di Faraday, carica di un mole di elettroni
+        R_cost J*K/mol = 8.31446261815324 J*K/mol   # Costante universale dei gas
+        
+        
+        # concentrazione del calcio
+        eta real = 0.04 
+        tau_calcio ms = 12 ms
+        Ca_concentrazione_rest mol/m**3  = 0.000070 mol/m**3 
+        # c star
+        tau_star ms = 278.318 ms
+        
+        #Rho
+        tau_rho s = 70 s
+        gamma_p real = 216.2
+        gamma_d real = 101.5
+        theta_d mol*ms/m**3 = 0.05 mol*ms/m**3  #messe a caso guardando grafico
+        theta_p mol*ms/m**3 = 0.1 mol*ms/m**3  #messe a caso guardando grafico
+        
+        #Gampa
+        
+        
         # constant external input current
         I_e pA = 0 pA
 
     internals:
         RefractoryCounts integer = steps(t_ref) # refractory time in steps
-        # AMPAInitialValue Calculation
-        inline exact_integration_adjustment_AMPA real = (1 / AMPA_Tau_2 - 1 / AMPA_Tau_1) * ms
-        t_peak_AMPA real = (AMPA_Tau_2 * AMPA_Tau_1 * ln(AMPA_Tau_2 / AMPA_Tau_1)) / (AMPA_Tau_2 - AMPA_Tau_1) / ms
-        inline normalisation_factor_AMPA real = 1 / (exp(-t_peak_AMPA / AMPA_Tau_1) - exp(-t_peak_AMPA / AMPA_Tau_2))
-        inline AMPAInitialValue real = AMPA_g_peak * normalisation_factor_AMPA * exact_integration_adjustment_AMPA
-
+        
         # NMDAInitialValue Calculation
         inline exact_integration_adjustment_NMDA real = (1 / NMDA_Tau_2 - 1 / NMDA_Tau_1) * ms
         t_peak_NMDA real = (NMDA_Tau_2 * NMDA_Tau_1 * ln(NMDA_Tau_2 / NMDA_Tau_1)) / (NMDA_Tau_2 - NMDA_Tau_1) / ms
         inline normalisation_factor_NMDA real = 1 / (exp(-t_peak_NMDA / NMDA_Tau_1) - exp(-t_peak_NMDA / NMDA_Tau_2))
         inline NMDAInitialValue real = NMDA_g_peak * normalisation_factor_NMDA * exact_integration_adjustment_NMDA
-
+        
+        #VDCC
+        gca_bar_abs_VDCC nS = gca_bar_VDCC * 4 * pi * ( ( 3 * volume_CR ) / ( 4 * pi )  )**(2 / 3)
+        Eca_syn mV = ( 1000 ) * (25.693 * mV / 2 ) * ln( cao_CR / cai_CR )
+        
     input:
         inh_spikes <- inhibitory spike
         exc_spikes <- excitatory spike
@@ -122,6 +179,19 @@ neuron iaf_cond_bubu:
 
     update:
         integrate_odes()
+        if (C_star - theta_p) < 0:
+            Heaviside_p  = 0
+        elif (C_star - theta_p) > 0:
+            Heaviside_p = 1
+        elif (C_star - theta_p) == 0:
+            Heaviside_p = 1/2
+            
+         if (C_star - theta_d) < 0:
+            Heaviside_d = 0
+        elif (C_star - theta_d) > 0:
+            Heaviside_d = 1
+        elif (C_star - theta_d) == 0:
+            Heaviside_d = 1/2
         if r != 0: # neuron is absolute refractory
             r =  r - 1
             V_m = V_reset # clamp potential
@@ -129,6 +199,3 @@ neuron iaf_cond_bubu:
             r = RefractoryCounts
             V_m = V_reset # clamp potential
             emit_spike()
-
-
-
