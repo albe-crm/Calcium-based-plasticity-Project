@@ -51,7 +51,6 @@ neuron iaf_cond_alpha:
         #################################### variables for VDCC ###########################
         kernel gca_bar_abs_VDCC = gca_bar_VDCC * 4*pi*(3/4*volume_CR/pi)^(2/3)
         kernel gca_VDCC = (1e-3) * gca_bar_abs_VDCC * m_VDCC * m_VDCC * h_VDCC
-        kernel Eca_syn = (1000) * R * (37 + 273.15) / (2*FARADAY) * log(cao_CR/cai_CR)
         ##################################################################################
         
         inline I_syn_exc pA = convolve(g_exc, exc_spikes) * nS * ( V_m - E_exc )
@@ -85,8 +84,6 @@ neuron iaf_cond_alpha:
         kh_VDCC         = -9.2      #(mV)         inact, Magee and Johnston 1995
         mtau_VDCC       = 1         #(ms)         max time constant (guess)
         htau_VDCC       = 27        #(ms)
-        cao_CR          = 2.0       #(mM)        : Extracellular calcium concentration in slices
-        cai_CR          = 1e-6
         volume_CR       = 0.087     #(um3)       : From spine data by Ruth Benavides-Piccione (unpublished)
         
 
@@ -95,6 +92,7 @@ neuron iaf_cond_alpha:
 
     internals:
         RefractoryCounts integer = steps(t_ref) # refractory time in steps
+        inline Eca_syn mV = (1000) * R * (37 + 273.15 * K) / (z * F) * ln(cao_CR/cai_CR)
 
     input:
         inh_spikes <- inhibitory spike
