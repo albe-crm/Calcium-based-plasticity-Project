@@ -1,11 +1,11 @@
 
 parameters:
-tau_r_AMPA = 0.2 (ms)   #tau rise (doubel exponential)
-tau_d_AMPA = 1.7 (ms)   #tau decayse (>tau_r_AMPA)
-E_AMPA = 0 (mV)         #reversal potential
-gmax0_AMPA = 1.0 (nS)   #initial peak conductance
-gmax_d_AMPA = 1.0 (nS)  #peak conductance in the depressed state
-gmax_p_AMPA = 2.0 (nS)  #peak conductance in the potentiated state
+tau_r_AMPA ms = 0.2 ms  #tau rise (doubel exponential)
+tau_d_AMPA ms = 1.7 ms   #tau decayse (>tau_r_AMPA)
+E_AMPA mV = 0 mV         #reversal potential
+gmax0_AMPA nS = 1.0 nS   #initial peak conductance
+gmax_d_AMPA nS = 1.0 nS  #peak conductance in the depressed state
+gmax_p_AMPA nS = 2.0 nS  #peak conductance in the potentiated state
 
 
 initials:
