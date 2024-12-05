@@ -1,0 +1,27 @@
+
+parameters:
+tau_r_AMPA = 0.2 (ms)   #tau rise (doubel exponential)
+tau_d_AMPA = 1.7 (ms)   #tau decayse (>tau_r_AMPA)
+E_AMPA = 0 (mV)         #reversal potential
+gmax0_AMPA = 1.0 (nS)   #initial peak conductance
+gmax_d_AMPA = 1.0 (nS)  #peak conductance in the depressed state
+gmax_p_AMPA = 2.0 (nS)  #peak conductance in the potentiated state
+
+
+initials:
+gmax_AMPA = g_max0_AMPA 
+A_AMPA = 0
+B_AMPA = 0
+
+#breakpoint
+g_AMPA = = (1e-3)*gmax_AMPA * (B_AMPA-A_AMPA)
+i_AMPA = g_AMPA*(Vm - E_AMPA)
+
+i = i_AMPA + i_NMDA + ica_VDCC
+
+#derivative state
+A_AMPA' = - A_AMPA/tau_r_AMPA
+B_AMPA' = - B_AMPA/tau_d_AMPA
+gmax_AMPA' = (gmax_d_AMPA + rho_GB*(gmax_p_AMPA - gmax_d_AMPA) - gmax_AMPA)/ ((1e3)*tau_exp_GB)
+
+
