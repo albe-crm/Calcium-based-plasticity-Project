@@ -11,26 +11,22 @@ of conductance modelled by an alpha function. The alpha function
 is normalised such that an event of weight 1.0 results in a peak current of 1 nS
 at :math:`t = \tau_{syn}`.
 
++ 
 
-References
+1) AMPA receptor with a dual-exponential conductance profile.
+2) NMDA receptor  with a dual-exponential conductance profile and magnesium
+   block as described in Jahr and Stevens 1990.
+
+
 ++++++++++
 
-.. [1] Meffin H, Burkitt AN, Grayden DB (2004). An analytical
-       model for the large, fluctuating synaptic conductance state typical of
-       neocortical neurons in vivo. Journal of Computational Neuroscience,
-       16:159-175.
-       DOI: https://doi.org/10.1023/B:JCNS.0000014108.03012.81
-.. [2] Bernander O, Douglas RJ, Martin KAC, Koch C (1991). Synaptic background
-       activity influences spatiotemporal integration in single pyramidal
-       cells.  Proceedings of the National Academy of Science USA,
-       88(24):11569-11573.
-       DOI: https://doi.org/10.1073/pnas.88.24.11569
-.. [3] Kuhn A, Rotter S (2004) Neuronal integration of synaptic input in
-       the fluctuation- driven regime. Journal of Neuroscience,
-       24(10):2345-2356
-       DOI: https://doi.org/10.1523/JNEUROSCI.3349-03.2004
 
-See also
+       NOTE: AGGIUNGERE FATTORE PER PRENDERE SOLO CONTRIBUTO RICHIESTO DEL NMDA
+            DA CAPIRE PERCHE METTER SEGNO NEGATIVO AL CA I
+            da capire come mai il revrs pot del nmda nel glu e -3 e nel tononi e 0mv
+            perche cao_cr e diverso da Ca_concentrazione_rest
+
+
 ++++++++
 
 iaf_cond_bubu
@@ -45,21 +41,23 @@ neuron iaf_cond_bubu:
         g_NMDA$ real = NMDAInitialValue
         h_var real = 0
         m_var real = 0
-        Ca_concentrazione_i mol/m**3 = 1e-6 mol/m**3
+        Ca_concentrazione_i mol/m**3 = 0.000070 mol/m**3 
         C_star mol*ms/m**3 = 0 mol*ms/m**3
         Rho real = 0
         Eca_syn mV = 0 mV
         Heaviside_p real = 0
         Heaviside_d real = 0
+        g_AMPA_scale nS = 2.5 nS
     equations:
-        recordable inline I_syn_ampa pA = -convolve(g_AMPA, AMPA) * nS * (V_m - AMPA_E_rev)
-
-        recordable inline I_syn_nmda pA = -convolve(g_NMDA, NMDA) * nS * (V_m - NMDA_E_rev) / (1 + exp((NMDA_Vact - V_m) / NMDA_Sact))
+        recordable inline I_syn_ampa pA = convolve(g_AMPA, AMPA) * g_AMPA_scale * (V_m - AMPA_E_rev) 
+        
+        ################Corrente di calcio mediata da NMDA  (aggiungendo Pf_NMDA)     
+        recordable inline g_NMDA_convolve nS = convolve(g_NMDA, NMDA) * nS  
         # For now, maintaining NMDA contribution to V_m. Consider separating I_syn for membrane potential and plasticity.
         
+        recordable inline I_syn_nmda pA = -g_NMDA_convolve * (V_m - NMDA_E_rev) / (1 + exp((NMDA_Vact - V_m) / NMDA_Sact))    #questa non ci serve neanche in realta
         
-        
-        
+        recordable inline ica_NMDA pA = Pf_NMDA * g_NMDA_convolve * (V_m - 40.0)
         #################################### variables for VDCC ###########################
         recordable inline h_infinity real = 1 / (1 + exp( ( V_hh - V_m) / k_h ) )
         recordable inline m_infinity real = 1 / (1 + exp( ( V_hm - V_m ) / k_m ) )
@@ -78,10 +76,11 @@ neuron iaf_cond_bubu:
         inline I_syn_exc pA = convolve(g_exc, exc_spikes) * nS * ( V_m - E_exc )
         inline I_syn_inh pA = convolve(g_inh, inh_spikes) * nS * ( V_m - E_inh )
         inline I_leak pA = g_L * ( V_m - E_L )
-        V_m' = ( -I_leak - I_syn_exc - I_syn_inh + I_e + I_stim - I_syn ) / C_m
+        V_m' = ( -I_leak - I_syn_exc - I_syn_inh + I_e + I_stim - I_syn_ampa - I_syn_nmda ) / C_m
         
-        #########################################variazione concentrazione calcio##########################################             
-        Ca_concentrazione_i' = ( Ica_VDCC + I_syn_nmda ) * ( eta / ( 2 * Farad_cost * volume_CR ) ) - (Ca_concentrazione_i - Ca_concentrazione_rest) / tau_calcio
+        #########################################variazione concentrazione calcio##########################################     
+        #DA CAPIRE
+        Ca_concentrazione_i' = - 1 * ( Ica_VDCC + ica_NMDA ) * ( eta / ( 2 * Farad_cost * volume_CR ) ) - (Ca_concentrazione_i - Ca_concentrazione_rest) / tau_calcio
         ###############################################Variabile cstar##################################################################
         C_star' = -1 * ( C_star / tau_star ) + ( Ca_concentrazione_i - Ca_concentrazione_rest)
         ################################################################################################################################
@@ -93,10 +92,8 @@ neuron iaf_cond_bubu:
         
         ######################################### Gampa ###############################################################################
         #siccome abbiamo inizializzto rho a zero 
-        #recordable inline g_AMPA_target nS = gmax_d_AMPA - Rho(gmax_p_AMPA - gmax_d_AMPA)
-        #g_AMPA' = ( g_AMPA_target - g_AMPA * nS ) / (nS * tau_ampa_update )
-
-        
+        recordable inline g_AMPA_target nS = gmax_d_AMPA - Rho(gmax_p_AMPA - gmax_d_AMPA)
+        g_AMPA_scale' = (g_AMPA_target - g_AMPA_scale) / tau_ampa_update
         
       
         #############
@@ -158,13 +155,13 @@ neuron iaf_cond_bubu:
         tau_rho s = 70 s
         gamma_p real = 216.2
         gamma_d real = 101.5
-        theta_d mol*ms/m**3 = 0.05 mol*ms/m**3  #messe a caso guardando grafico
-        theta_p mol*ms/m**3 = 0.1 mol*ms/m**3  #messe a caso guardando grafico
+        theta_d mol*ms/m**3 = 0.00025 mol*ms/m**3  #messe a caso guardando grafico
+        theta_p mol*ms/m**3 = 0.00022 mol*ms/m**3  #messe a caso guardando grafico
         
         #Gampa update
         tau_ampa_update s = 100 s
-        gmax_d_AMPA nS = 1.0 nS
-        gmax_p_AMPA nS = 2.0 nS  
+        gmax_d_AMPA nS = 0.0 nS
+        gmax_p_AMPA nS = 5.0 nS  
         
         # constant external input current
         I_e pA = 0 pA
@@ -183,6 +180,9 @@ neuron iaf_cond_bubu:
         t_peak_NMDA real = (NMDA_Tau_2 * NMDA_Tau_1 * ln(NMDA_Tau_2 / NMDA_Tau_1)) / (NMDA_Tau_2 - NMDA_Tau_1) / ms
         inline normalisation_factor_NMDA real = 1 / (exp(-t_peak_NMDA / NMDA_Tau_1) - exp(-t_peak_NMDA / NMDA_Tau_2))
         inline NMDAInitialValue real = NMDA_g_peak * normalisation_factor_NMDA * exact_integration_adjustment_NMDA
+        
+        # Frazione di corrente di calcio mediata da NMDA
+        Pf_NMDA real = (4 * cao_CR) / (4 * cao_CR + (1 / 1.38) * 120 ) * 0.6
         
         #VDCC
         gca_bar_abs_VDCC nS = gca_bar_VDCC * 4 * pi * ( ( 3 * volume_CR ) / ( 4 * pi )  )**(2 / 3)
