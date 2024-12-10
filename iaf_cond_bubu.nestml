@@ -43,12 +43,13 @@ neuron iaf_cond_bubu:
         m_var real = 0
         Ca_concentrazione_i mol/m**3 = 0.000070 mol/m**3 
         C_star mol*ms/m**3 = 0 mol*ms/m**3
+        loga real = 10.26
         Rho real = 0
-        Eca_syn mV = 0 mV
         Heaviside_p real = 0
         Heaviside_d real = 0
         g_AMPA_scale nS = 2.5 nS
     equations:
+        recordable inline Eca_syn mV = ( Val / 2 ) * loga * 10**-3
         recordable inline I_syn_ampa pA = convolve(g_AMPA, AMPA) * g_AMPA_scale * (V_m - AMPA_E_rev) 
         
         ################Corrente di calcio mediata da NMDA  (aggiungendo Pf_NMDA)     
@@ -76,7 +77,7 @@ neuron iaf_cond_bubu:
         inline I_syn_exc pA = convolve(g_exc, exc_spikes) * nS * ( V_m - E_exc )
         inline I_syn_inh pA = convolve(g_inh, inh_spikes) * nS * ( V_m - E_inh )
         inline I_leak pA = g_L * ( V_m - E_L )
-        V_m' = ( -I_leak - I_syn_exc - I_syn_inh + I_e + I_stim - I_syn_ampa - I_syn_nmda ) / C_m
+        V_m' = ( -I_leak - I_syn_exc - I_syn_inh + I_e + I_stim - I_syn_ampa - I_syn_nmda - Ica_VDCC ) / C_m
         
         #########################################variazione concentrazione calcio##########################################     
         #DA CAPIRE
@@ -88,11 +89,11 @@ neuron iaf_cond_bubu:
         
         
         #####################################Heaviside function e Rho #################################################################
-        Rho' = ( -1 * Rho * ( 1 - Rho ) * ( 0.5 - Rho) + gamma_p * ( 1 - Rho ) * Heaviside_p - gamma_d * Rho * Heaviside_d ) / tau_rho
+        Rho' = ( (-1 * Rho * ( 1 - Rho ) * ( 0.5 - Rho) ) + ( ( gamma_p * ( 1 - Rho ) * Heaviside_p ) - ( gamma_d * Rho * Heaviside_d ) ) ) / tau_rho
         
         ######################################### Gampa ###############################################################################
         #siccome abbiamo inizializzto rho a zero 
-        recordable inline g_AMPA_target nS = gmax_d_AMPA - Rho(gmax_p_AMPA - gmax_d_AMPA)
+        recordable inline g_AMPA_target nS = gmax_d_AMPA + Rho * (gmax_p_AMPA - gmax_d_AMPA)
         g_AMPA_scale' = (g_AMPA_target - g_AMPA_scale) / tau_ampa_update
         
       
@@ -150,11 +151,11 @@ neuron iaf_cond_bubu:
         Ca_concentrazione_rest mol/m**3  = 0.000070 mol/m**3 
         # c star
         tau_star ms = 278.318 ms
-        
+        Val mV = 26.6404858 mV 
         #Rho
         tau_rho s = 70 s
-        gamma_p real = 216.2
-        gamma_d real = 101.5
+        gamma_p real = 450.0
+        gamma_d real = 100.0
         theta_d mol*ms/m**3 = 0.00025 mol*ms/m**3  #messe a caso guardando grafico
         theta_p mol*ms/m**3 = 0.00022 mol*ms/m**3  #messe a caso guardando grafico
         
@@ -186,7 +187,6 @@ neuron iaf_cond_bubu:
         
         #VDCC
         gca_bar_abs_VDCC nS = gca_bar_VDCC * 4 * pi * ( ( 3 * volume_CR ) / ( 4 * pi )  )**(2 / 3)
-        
     input:
         inh_spikes <- inhibitory spike
         exc_spikes <- excitatory spike
@@ -198,7 +198,7 @@ neuron iaf_cond_bubu:
         spike
 
     update:
-        Eca_syn = (25.693 * mV / 2 ) * ln( cao_CR / Ca_concentrazione_i )
+        loga = ln( cao_CR / Ca_concentrazione_i )
         integrate_odes()
         
         if (C_star - theta_p) < 0:
@@ -214,6 +214,8 @@ neuron iaf_cond_bubu:
             Heaviside_d = 1
         elif (C_star - theta_d) == 0:
             Heaviside_d = 1/2
+            
+            
         if r != 0: # neuron is absolute refractory
             r =  r - 1
             V_m = V_reset # clamp potential
