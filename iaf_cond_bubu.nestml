@@ -37,8 +37,12 @@ neuron iaf_cond_bubu:
         V_m mV = E_L   # membrane potential
         g_NMDA real = 0
         g_AMPA real = 0
+        g_GABAA real = 0
+        g_GABAB real = 0
         g_AMPA$ real = AMPAInitialValue
         g_NMDA$ real = NMDAInitialValue
+        g_GABAA$ real = GABA_AInitialValue
+        g_GABAB$ real = GABA_BInitialValue
         h_var real = 0
         m_var real = 0
         Ca_concentrazione_i mol/m**3 = 0.000070 mol/m**3 
@@ -48,6 +52,7 @@ neuron iaf_cond_bubu:
         Heaviside_p real = 0
         Heaviside_d real = 0
         g_AMPA_scale nS = 2.5 nS
+
     equations:
         recordable inline Eca_syn mV = ( Val / 2 ) * loga * 10**-3
         recordable inline I_syn_ampa pA = convolve(g_AMPA, AMPA) * g_AMPA_scale * (V_m - AMPA_E_rev) 
@@ -70,7 +75,18 @@ neuron iaf_cond_bubu:
         
         recordable inline Ica_VDCC pA = gca_VDCC * ( V_m - Eca_syn ) 
         ##################################################################################
-        recordable inline I_syn pA = Ica_VDCC + I_syn_ampa + I_syn_nmda
+
+
+        ##########################################GABA?######################################
+
+        inline I_syn_gaba_a pA = -convolve(g_GABAA, GABA_A) * nS * ( V_m - GABA_A_E_rev )
+        inline I_syn_gaba_b pA = -convolve(g_GABAB, GABA_B) * nS * ( V_m - GABA_B_E_rev )
+
+        ###################################################################################
+
+
+        recordable inline I_syn pA = Ica_VDCC + I_syn_ampa + I_syn_nmda + I_syn_gaba_a + I_syn_gaba_b
+
       ################################ potenziale di membrana del iaf #########################################
         kernel g_inh = (e/tau_syn_inh) * t * exp(-t/tau_syn_inh)
         kernel g_exc = (e/tau_syn_exc) * t * exp(-t/tau_syn_exc)
@@ -105,6 +121,12 @@ neuron iaf_cond_bubu:
                
         kernel g_NMDA' = g_NMDA$ - g_NMDA / NMDA_Tau_2,
                g_NMDA$' = -g_NMDA$ / NMDA_Tau_1
+
+        kernel g_GABAA' = g_GABAA$ - g_GABAA / GABA_A_Tau_2,
+               g_GABAA$' = -g_GABAA$ / GABA_A_Tau_1
+
+        kernel g_GABAB' = g_GABAB$ - g_GABAB / GABA_B_Tau_2,
+               g_GABAB$' = -g_GABAB$ / GABA_B_Tau_1
                
     parameters:
         V_th mV = -55 mV         # Threshold potential
@@ -144,7 +166,16 @@ neuron iaf_cond_bubu:
         Farad_cost C/mol = 96485 C/mol      # Costante di Faraday, carica di un mole di elettroni
         R_cost J*K/mol = 8.31446261815324 J*K/mol   # Costante universale dei gas
         
-        
+        # GABA
+        GABA_A_g_peak nS = 0.33 nS   # peak conductance
+        GABA_A_Tau_1 ms = 1.0 ms     # rise time
+        GABA_A_Tau_2 ms = 7.0 ms     # decay time, Tau_1 < Tau_2
+        GABA_A_E_rev mV = -70.0 mV   # reversal potential
+        GABA_B_g_peak nS = 0.0132 nS # peak conductance
+        GABA_B_Tau_1 ms = 60.0 ms    # rise time
+        GABA_B_Tau_2 ms = 200.0 ms   # decay time, Tau_1 < Tau_2
+        GABA_B_E_rev mV = -90.0 mV   # reversal potential for intrinsic current
+
         # concentrazione del calcio
         eta real = 0.04 
         tau_calcio ms = 12 ms
@@ -187,11 +218,19 @@ neuron iaf_cond_bubu:
         
         #VDCC
         gca_bar_abs_VDCC nS = gca_bar_VDCC * 4 * pi * ( ( 3 * volume_CR ) / ( 4 * pi )  )**(2 / 3)
+
+        #GABA
+        GABA_AInitialValue real = compute_synapse_constant( GABA_A_Tau_1, GABA_A_Tau_2, GABA_A_g_peak )
+        GABA_BInitialValue real = compute_synapse_constant( GABA_B_Tau_1, GABA_B_Tau_2, GABA_B_g_peak )
+
+
     input:
         inh_spikes <- inhibitory spike
         exc_spikes <- excitatory spike
         AMPA <- spike
         NMDA <- spike
+        GABA_A <- spike
+        GABA_B <- spike
         I_stim pA <- continuous
 
     output:
@@ -199,7 +238,7 @@ neuron iaf_cond_bubu:
 
     update:
         loga = ln( cao_CR / Ca_concentrazione_i )
-        integrate_odes()
+        integrate_odes(V_m, Rho, C_star)
         
         if (C_star - theta_p) < 0:
             Heaviside_p  = 0
@@ -223,3 +262,16 @@ neuron iaf_cond_bubu:
             r = RefractoryCounts
             V_m = V_reset # clamp potential
             emit_spike()
+
+    function compute_synapse_constant(Tau_1 ms, Tau_2 ms, g_peak real) real:
+        # Factor used to account for the missing 1/((1/Tau_2)-(1/Tau_1)) term
+        # in the ht_neuron_dynamics integration of the synapse terms.
+        # See: Exact digital simulation of time-invariant linear systems
+        # with applications to neuronal modeling, Rotter and Diesmann,
+        # section 3.1.2.
+        exact_integration_adjustment real = ( ( 1 / Tau_2 ) - ( 1 / Tau_1 ) ) * ms
+
+        t_peak real = ( Tau_2 * Tau_1 ) * ln( Tau_2 / Tau_1 ) / ( Tau_2 - Tau_1 ) / ms
+        normalisation_factor real = 1 / ( exp( -t_peak / Tau_1 ) - exp( -t_peak / Tau_2 ) )
+
+        return g_peak * normalisation_factor * exact_integration_adjustment
