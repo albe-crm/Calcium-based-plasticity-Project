@@ -81,7 +81,7 @@ neuron iaf_cond_bubu:
         
         #########################################variazione concentrazione calcio##########################################     
         #DA CAPIRE
-        Ca_concentrazione_i' = - 1 * ( Ica_VDCC + ica_NMDA ) * ( eta / ( 2 * Farad_cost * volume_CR ) ) - (Ca_concentrazione_i - Ca_concentrazione_rest) / tau_calcio
+        Ca_concentrazione_i' =  1 * ( Ica_VDCC + ica_NMDA ) * ( eta / ( 2 * Farad_cost * volume_CR ) ) - (Ca_concentrazione_i - Ca_concentrazione_rest) / tau_calcio
         ###############################################Variabile cstar##################################################################
         C_star' = -1 * ( C_star / tau_star ) + ( Ca_concentrazione_i - Ca_concentrazione_rest)
         ################################################################################################################################
