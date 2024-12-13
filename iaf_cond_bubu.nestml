@@ -44,7 +44,7 @@ neuron iaf_cond_bubu:
         g_NMDA$ real = NMDAInitialValue
         h_var real = 0
         m_var real = 0
-        Ca_concentrazione_i mol/m**3 = 70e-9 mol/m**3 
+        Ca_concentrazione_i mol/m**3 = 70e-12 mol/m**3 
         C_star mol/m**3 = 0 mol/m**3
         loga real = 10.26
         Rho real = 0
@@ -57,7 +57,7 @@ neuron iaf_cond_bubu:
         
     equations:
         recordable inline Eca_syn mV = ( Val / 2 ) * loga
-        recordable inline I_syn_ampa nA = convolve(g_AMPA, AMPA) * g_AMPA_scale * (V_m - AMPA_E_rev) * 10
+        recordable inline I_syn_ampa nA = convolve(g_AMPA, AMPA) * g_AMPA_scale * (V_m - AMPA_E_rev) 
         
         ################Corrente di calcio mediata da NMDA  (aggiungendo Pf_NMDA)     
         recordable inline g_NMDA_convolve uS = -convolve(g_NMDA, NMDA) * uS  
@@ -150,8 +150,8 @@ neuron iaf_cond_bubu:
         k_h mV = -9.2 mV                   # Pendenza inibizione, Magee e Johnston 1995
         tau_m ms = 1 ms                    # Costante di tempo massima (stima)
         tau_h ms = 27 ms                   # Costante di tempo per h
-        cao_CR mol/m**3  = 0.020 mol/m**3                      # Concentrazione extracellulare di calcio in fette
-        volume_CR um*um*um = 0.087 um*um*um               # Volume (micrometri cubi)  il volume considerabile uguale a 1 per quello che interessa
+        cao_CR mol/m**3  = 2e-6 mol/m**3                      # Concentrazione extracellulare di calcio in fette
+        volume_CR um**3 = 0.087 um**3               # Volume (micrometri cubi)  il volume considerabile uguale a 1 per quello che interessa
         Farad_cost C/mol = 96485 C/mol      # Costante di Faraday, carica di un mole di elettroni
         R_cost J*K/mol = 8.31446261815324 J*K/mol   # Costante universale dei gas
         
@@ -159,7 +159,7 @@ neuron iaf_cond_bubu:
         # concentrazione del calcio
         eta real = 0.04 
         tau_calcio ms = 12 ms
-        Ca_concentrazione_rest mol/m**3  = 70e-9 mol/m**3 
+        Ca_concentrazione_rest mol/m**3  = 70e-12 mol/m**3 
         # c star
         tau_star real = 278.318
         Val mV = 26.6404858 mV 
@@ -167,8 +167,8 @@ neuron iaf_cond_bubu:
         tau_rho s = 70 s
         gamma_p real = 450.0
         gamma_d real = 100.0
-        theta_d mol/m**3 = 0.0000075 mol/m**3  #messe a caso guardando grafico
-        theta_p mol/m**3 = 0.000013 mol/m**3  #messe a caso guardando grafico
+        theta_d mol/m**3 = 0.0000075e-3 mol/m**3  #messe a caso guardando grafico
+        theta_p mol/m**3 = 0.000013e-3 mol/m**3  #messe a caso guardando grafico
         
         #Gampa update
         tau_ampa_update s = 10 s
