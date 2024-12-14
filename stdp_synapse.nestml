@@ -57,25 +57,26 @@ synapse stdp:
     input:
         pre_spikes <- spike
         post_spikes <- spike
+        USE_syn real <- continuous
 
     output:
         spike
 
     onReceive(post_spikes):
-        print("Info: processing a postsynaptic spike at time t = {t}")
+        #print("Info: processing a postsynaptic spike at time t = {t}")
         post_trace += 1
 
         # potentiate synapse
-        w_ real = Wmax * ( w / Wmax  + (lambda * ( 1. - ( w / Wmax ) )**mu_plus * pre_trace ))
-        w = min(Wmax, w_)
+        #w_ real = Wmax * ( w / Wmax  + (lambda * ( 1. - ( w / Wmax ) )**mu_plus * pre_trace ))
+        w = USE_syn
 
     onReceive(pre_spikes):
-        print("Info: processing a presynaptic spike at time t = {t}")
+        #print("Info: processing a presynaptic spike at time t = {t}")
         pre_trace += 1
 
         # depress synapse
-        w_ real = Wmax * ( w / Wmax  - ( alpha * lambda * ( w / Wmax )**mu_minus * post_trace ))
-        w = max(Wmin, w_)
+        #w_ real = Wmax * ( w / Wmax  - ( alpha * lambda * ( w / Wmax )**mu_minus * post_trace ))
+        w = USE_syn
 
         # deliver spike to postsynaptic partner
         deliver_spike(w, d)
