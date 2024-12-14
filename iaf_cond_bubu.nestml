@@ -47,17 +47,21 @@ neuron iaf_cond_bubu:
         Ca_concentrazione_i mol/m**3 = 0.000000070 mol/m**3 
         C_star mol/m**3 = 0 mol/m**3
         loga real = 10.26
-        Rho real = 0
+        Rho real = 0.5
         Heaviside_p real = 0
         Heaviside_d real = 0
-        g_AMPA_scale nS = 20 nS
+        g_AMPA_scale nS = 26 nS
+        USE_scale real = 6
         g_spike real = 0
         flag_C real = 0
-      
-        
+        feedback real = 0
+        c_star_corrente mol/m**3 = 0 mol/m**3
+        g_ampa_target_feedback nS = 0 nS
+        USE_target_feedback real = 0
+        feedback_active real = 0
     equations:
         recordable inline Eca_syn mV = ( Val / 2 ) * loga
-        recordable inline I_syn_ampa pA = convolve(g_AMPA, AMPA) * g_AMPA_scale * (V_m - AMPA_E_rev) * 10
+        recordable inline I_syn_ampa pA = convolve(g_AMPA, AMPA) * g_AMPA_scale * (V_m - AMPA_E_rev)
         
         ################Corrente di calcio mediata da NMDA  (aggiungendo Pf_NMDA)     
         recordable inline g_NMDA_convolve nS = -convolve(g_NMDA, NMDA) * nS  
@@ -97,12 +101,18 @@ neuron iaf_cond_bubu:
         
         
         #####################################Heaviside function e Rho #################################################################
-        Rho' = ( (-1 * Rho * ( 1 - Rho ) * ( 0.5 - Rho) ) + ( ( gamma_p * ( 1 - Rho ) * Heaviside_p ) - ( gamma_d * Rho * Heaviside_d ) ) ) / tau_rho
+        Rho' = ( (-1 * Rho * ( 1 - Rho ) * ( 0.5 - Rho) ) + ( ( gamma_p * ( 1 - Rho ) * Heaviside_p ) - ( gamma_d * Rho * Heaviside_d ) )+ (K_factor * (0.5 - Rho) * (1 - Heaviside_p) * (1 - Heaviside_d) ) * feedback ) / tau_rho
         
         ######################################### Gampa ###############################################################################
         #siccome abbiamo inizializzto rho a zero 
-        recordable inline g_AMPA_target nS = gmax_d_AMPA + Rho * (gmax_p_AMPA - gmax_d_AMPA)
+        #inline g_ampa_target_feedback nS = g_AMPA_scale
+        recordable inline g_AMPA_target nS = gmax_d_AMPA + Rho * (gmax_p_AMPA - gmax_d_AMPA)  +  ((K_factor_ampa * (gmax_d_AMPA - g_ampa_target_feedback) * (1 - Heaviside_p) * (1 - Heaviside_d) ) * feedback)
         g_AMPA_scale' = (g_AMPA_target - g_AMPA_scale) / tau_ampa_update
+        
+        
+        #inline USE_target_feedback real = USE_scale
+        recordable inline USE_target real = USE_max_d + Rho * (USE_max_p - USE_max_d) + ( (K_factor_ampa * (USE_max_d - USE_target_feedback) * (1 - Heaviside_p) * (1 - Heaviside_d) ) * feedback )
+        USE_scale' = (USE_target - USE_scale) / tau_USE_update
         
       
         #############
@@ -163,17 +173,30 @@ neuron iaf_cond_bubu:
         # c star
         tau_star real = 278.318
         Val mV = 26.6404858 mV 
+        
+        
         #Rho
-        tau_rho s = 70 s
+        tau_rho s = 50 s
         gamma_p real = 450.0
         gamma_d real = 100.0
-        theta_d mol/m**3 = 0.0000075 mol/m**3  #messe a caso guardando grafico
-        theta_p mol/m**3 = 0.000013 mol/m**3  #messe a caso guardando grafico
+        theta_d mol/m**3 = 0.00004 mol/m**3  #messe a caso guardando grafico
+        theta_p mol/m**3 = 0.000075 mol/m**3  #messe a caso guardando grafico
+        K_factor real = 30
+        theta_d_ausiliaria mol/m**3 = 0.0000355 mol/m**3  #messe a caso guardando grafico
+
         
         #Gampa update
-        tau_ampa_update s = 10 s
+        tau_ampa_update s = 8 s
         gmax_d_AMPA nS = 1.0 nS
-        gmax_p_AMPA nS = 40.0 nS  
+        gmax_p_AMPA nS = 50.0 nS  
+        K_factor_ampa real = 30
+        
+        #USE update
+        
+        USE_max_d real = 1.0
+        USE_max_p real = 10.0
+        tau_USE_update s = 8.0 s
+        
         
         # constant external input current
         I_e pA = 0 pA
@@ -209,23 +232,51 @@ neuron iaf_cond_bubu:
         spike
 
     update:
+       
         loga = ln( cao_CR / Ca_concentrazione_i )
+
+        # Memorizzazione del valore precedente di C_star
+        c_star_past mol/m**3 = c_star_corrente
+
+        # Aggiornamento del valore corrente di C_star
+        c_star_corrente = C_star
+
+        # Integrazione delle equazioni differenziali
         integrate_odes()
-        
+
+        # Aggiornamento delle funzioni di Heaviside
         if (C_star - theta_p) < 0:
             Heaviside_p  = 0
         elif (C_star - theta_p) > 0:
             Heaviside_p = 1
-        elif (C_star - theta_p) == 0:
-            Heaviside_p = 1/2
-            
-         if (C_star - theta_d) < 0:
+        else:
+            Heaviside_p = 0.5  # C_star == theta_p
+
+        if (C_star - theta_d) < 0:
             Heaviside_d = 0
         elif (C_star - theta_d) > 0:
             Heaviside_d = 1
-        elif (C_star - theta_d) == 0:
-            Heaviside_d = 1/2
-            
+        else:
+            Heaviside_d = 0.5  # C_star == theta_d
+
+        # Definizione delle variabili per feedback
+        B mol/m**3 = c_star_past - theta_d_ausiliaria
+        C mol/m**3 = c_star_corrente - theta_d_ausiliaria
+
+        # Condizione corretta per attivare il feedback
+        if B > 0 and C < 0:
+            feedback_active = 1  # Attiva il feedback
+        elif feedback_active == 1 and C > 0:
+            feedback_active = 0  # Disattiva il feedback
+
+        # Imposta il valore di feedback basato sullo stato attivo
+        if feedback_active == 1:
+            feedback = 1
+        else:
+            feedback = 0
+
+
+        
         if r == 0:           
             flag = 0
             if flag_C == 1:
@@ -235,7 +286,7 @@ neuron iaf_cond_bubu:
                     flag_C = 0
                     V_th = V_th_fissa
                     flag_B = 0 
-            
+                           
         if r != 0: # neuron is absolute refractory
             r =  r - 1
             V_m = V_reset # clamp potential
