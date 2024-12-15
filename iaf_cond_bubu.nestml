@@ -56,9 +56,8 @@ neuron iaf_cond_bubu:
         flag_C real = 0
         feedback real = 0
         c_star_corrente mol/m**3 = 0 mol/m**3
-        g_ampa_target_feedback nS = 0 nS
-        USE_target_feedback real = 0
         feedback_active real = 0
+        
     equations:
         recordable inline Eca_syn mV = ( Val / 2 ) * loga
         recordable inline I_syn_ampa pA = convolve(g_AMPA, AMPA) * g_AMPA_scale * (V_m - AMPA_E_rev)
@@ -105,13 +104,13 @@ neuron iaf_cond_bubu:
         
         ######################################### Gampa ###############################################################################
         #siccome abbiamo inizializzto rho a zero 
-        #inline g_ampa_target_feedback nS = g_AMPA_scale
-        recordable inline g_AMPA_target nS = gmax_d_AMPA + Rho * (gmax_p_AMPA - gmax_d_AMPA)  +  ((K_factor_ampa * (gmax_d_AMPA - g_ampa_target_feedback) * (1 - Heaviside_p) * (1 - Heaviside_d) ) * feedback)
+        recordable inline g_ampa_target_feedback nS = g_AMPA_scale
+        recordable inline g_AMPA_target nS = (1-feedback) * (gmax_d_AMPA + Rho * (gmax_p_AMPA - gmax_d_AMPA))  +  ((( g_ampa_target_feedback) * (1 - Heaviside_p) * (1 - Heaviside_d) )* feedback)
         g_AMPA_scale' = (g_AMPA_target - g_AMPA_scale) / tau_ampa_update
         
         
-        #inline USE_target_feedback real = USE_scale
-        recordable inline USE_target real = USE_max_d + Rho * (USE_max_p - USE_max_d) + ( (K_factor_ampa * (USE_max_d - USE_target_feedback) * (1 - Heaviside_p) * (1 - Heaviside_d) ) * feedback )
+        recordable inline USE_target_feedback real = USE_scale
+        recordable inline USE_target real = (1-feedback) * (USE_max_d + Rho * (USE_max_p - USE_max_d))+ (((USE_target_feedback) * (1 - Heaviside_p) * (1 - Heaviside_d) ) * feedback )
         USE_scale' = (USE_target - USE_scale) / tau_USE_update
         
       
@@ -182,7 +181,7 @@ neuron iaf_cond_bubu:
         theta_d mol/m**3 = 0.00004 mol/m**3  #messe a caso guardando grafico
         theta_p mol/m**3 = 0.000075 mol/m**3  #messe a caso guardando grafico
         K_factor real = 30
-        theta_d_ausiliaria mol/m**3 = 0.0000355 mol/m**3  #messe a caso guardando grafico
+        theta_d_ausiliaria mol/m**3 = 0.0000363 mol/m**3  #messe a caso guardando grafico
 
         
         #Gampa update
@@ -262,16 +261,18 @@ neuron iaf_cond_bubu:
         # Definizione delle variabili per feedback
         B mol/m**3 = c_star_past - theta_d_ausiliaria
         C mol/m**3 = c_star_corrente - theta_d_ausiliaria
-
+        D mol/m**3 = c_star_corrente - theta_d
         # Condizione corretta per attivare il feedback
         if B > 0 and C < 0:
             feedback_active = 1  # Attiva il feedback
-        elif feedback_active == 1 and C > 0:
+        if feedback_active == 1 and D > 0:
             feedback_active = 0  # Disattiva il feedback
 
         # Imposta il valore di feedback basato sullo stato attivo
         if feedback_active == 1:
             feedback = 1
+            #g_ampa_target_feedback nS = g_AMPA_scale
+            #USE_target_feedback real = USE_scale
         else:
             feedback = 0
 
